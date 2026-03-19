@@ -3,8 +3,8 @@ export default function RecentCallsTable({ data, loading }) {
 
   if (loading) {
     return (
-      <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
-        <div className="px-5 py-4 border-b border-slate-200">
+      <div className="bg-white border border-slate-200/80 rounded-2xl overflow-hidden shadow-sm">
+        <div className="px-6 py-4 border-b border-slate-100">
           <h2 className="text-lg font-semibold text-slate-900">Recent Calls</h2>
         </div>
         <div className="p-6 space-y-3">
@@ -18,8 +18,8 @@ export default function RecentCallsTable({ data, loading }) {
 
   if (rows.length === 0) {
     return (
-      <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
-        <div className="px-5 py-4 border-b border-slate-200">
+      <div className="bg-white border border-slate-200/80 rounded-2xl overflow-hidden shadow-sm">
+        <div className="px-6 py-4 border-b border-slate-100">
           <h2 className="text-lg font-semibold text-slate-900">Recent Calls</h2>
         </div>
         <div className="p-8 text-center text-slate-500 text-sm">No recent calls yet.</div>
@@ -51,13 +51,13 @@ export default function RecentCallsTable({ data, loading }) {
   }
 
   return (
-    <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm overflow-x-auto">
-      <div className="px-5 py-4 border-b border-slate-200">
+    <div className="bg-white border border-slate-200/80 rounded-2xl overflow-hidden shadow-sm overflow-x-auto">
+      <div className="px-6 py-4 border-b border-slate-100">
         <h2 className="text-lg font-semibold text-slate-900">Recent Calls</h2>
       </div>
       <table className="w-full min-w-[400px]">
         <thead>
-          <tr className="bg-slate-50 border-b border-slate-200">
+          <tr className="bg-slate-50/80 border-b border-slate-100">
             {columns.map((col) => (
               <th
                 key={col.key}

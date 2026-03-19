@@ -1,5 +1,14 @@
 # React + Vite
 
+## API & auth (cookies)
+
+- Set **`VITE_API_URL`** (see `.env.example`) — requests use **`${VITE_API_URL}/api`**.
+- The shared Axios client (`src/services/apiClient.js`) uses **`withCredentials: true`** so **httpOnly** session cookies from login/register are sent on **login, register, profile, logout, leads, payments**, etc.
+- If the backend also returns a JWT in JSON, it is still saved under **`localStorage`** (`token`) and sent as **`Authorization: Bearer`** when present.
+- Your API must allow credentials in CORS: **`Access-Control-Allow-Credentials: true`** and **`Access-Control-Allow-Origin`** set to your app origin (e.g. `http://localhost:5173`), not `*`.
+
+---
+
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
 Currently, two official plugins are available:

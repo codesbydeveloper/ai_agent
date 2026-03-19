@@ -1,24 +1,11 @@
-import axios from 'axios';
-import { API_BASE_URL } from '../utils/constants';
-
-const authApi = axios.create({
-  baseURL: `${API_BASE_URL}/api`,
-  headers: { 'Content-Type': 'application/json' },
-});
-
-// Attach JWT from localStorage to requests
-authApi.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token');
-  if (token) config.headers.Authorization = `Bearer ${token}`;
-  return config;
-});
+import { api } from './apiClient';
 
 /**
  * Register a new user
  * POST /api/register
  */
 export async function register({ name, email, password, role = 'admin', phone }) {
-  const { data } = await authApi.post('/register', {
+  const { data } = await api.post('/register', {
     name,
     email,
     password,
@@ -33,23 +20,23 @@ export async function register({ name, email, password, role = 'admin', phone })
  * POST /api/login
  */
 export async function login({ email, password }) {
-  const { data } = await authApi.post('/login', { email, password });
+  const { data } = await api.post('/login', { email, password });
   return data;
 }
 
 /**
- * Get current user (requires JWT)
+ * Get current user (session cookie and/or Bearer)
  * GET /api/profile
  */
 export async function getMe() {
-  const { data } = await authApi.get('/profile');
+  const { data } = await api.get('/profile');
   return data;
 }
 
 /**
- * Logout (invalidate session if backend supports it)
+ * Logout — send cookies so the server can clear the httpOnly session cookie
  * POST /api/logout
  */
 export async function logout() {
-  await authApi.post('/logout');
+  await api.post('/logout');
 }

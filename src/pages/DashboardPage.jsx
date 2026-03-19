@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react';
+import { useAuth } from '../store/authContext';
+import { getRole } from '../utils/roleUtils';
 import {
   getDashboardStats,
   getRecentCalls,
@@ -11,6 +13,8 @@ import CallsChart from '../components/charts/CallsChart';
 import ConversionChart from '../components/charts/ConversionChart';
 
 export default function DashboardPage() {
+  const { user } = useAuth();
+  const role = getRole(user);
   const [stats, setStats] = useState(null);
   const [recentCalls, setRecentCalls] = useState(null);
   const [revenue, setRevenue] = useState(null);
@@ -23,7 +27,6 @@ export default function DashboardPage() {
     getDashboardStats()
       .then((res) => {
         if (cancelled) return;
-        // API returns { success, data: { calls_made, revenue, ... } } — use inner data for cards
         setStats(res?.data ?? res);
       })
       .catch(() => { if (!cancelled) setStats({}); })
@@ -49,7 +52,6 @@ export default function DashboardPage() {
     return () => { cancelled = true; };
   }, []);
 
-  // Revenue chart: from GET /api/revenue (transactions/series) or fallback to stats.revenue
   let revenueSeries = [];
   let totalRevenueFromApi = null;
   if (Array.isArray(revenue)) revenueSeries = revenue;
@@ -74,7 +76,6 @@ export default function DashboardPage() {
 
   const statsForCards = stats && totalRevenueFromApi != null ? { ...stats, revenue: totalRevenueFromApi } : stats;
 
-  // Calls chart: from stats time series, or recent count, or stats.calls_made
   const callsSeries = Array.isArray(stats?.callsByPeriod) ? stats.callsByPeriod : (stats?.calls_by_period ?? []);
   const recentCount = Array.isArray(recentCalls) ? recentCalls.length : (recentCalls?.calls?.length ?? recentCalls?.recent?.length ?? 0);
   let callsChartData = callsSeries.length ? callsSeries : (recentCount ? [{ label: 'Recent', value: recentCount }] : []);
@@ -82,21 +83,46 @@ export default function DashboardPage() {
     callsChartData = [{ name: 'Total', calls: stats.calls_made ?? stats.total_calls }];
   }
 
-  // Conversion chart: from stats time series or stats.conversion_rate
   const conversionSeries = Array.isArray(stats?.conversionByPeriod) ? stats.conversionByPeriod : (stats?.conversion_by_period ?? []);
   const singleConversion = stats && (stats.conversionRate != null || stats.conversion_rate != null);
   const conversionChartData = conversionSeries.length ? conversionSeries : (singleConversion ? [{ label: 'Rate', value: stats.conversionRate ?? stats.conversion_rate }] : []);
 
+  const isViewer = role === 'viewer';
+  const isAgent = role === 'agent';
+
+  // Agent dashboard: simplified stats (Calls handled, Assigned leads, basic)
+  if (isAgent) {
+    const agentStats = {
+      ...statsForCards,
+      totalCalls: statsForCards?.calls_made ?? statsForCards?.total_calls ?? statsForCards?.totalCalls ?? 0,
+      assignedLeads: statsForCards?.assigned_leads ?? statsForCards?.assignedLeads ?? 0,
+      conversion_rate: statsForCards?.conversion_rate ?? statsForCards?.conversionRate ?? 0,
+    };
+    return (
+      <div className="space-y-8">
+        <div className="pb-6 border-b border-slate-200/80">
+          <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight">Dashboard</h1>
+          <p className="text-slate-500 text-sm mt-1">Calls handled and assigned leads.</p>
+        </div>
+        <StatsCards stats={agentStats} loading={statsLoading} variant="agent" />
+        <RecentCallsTable data={recentCalls} loading={callsLoading} />
+      </div>
+    );
+  }
+
+  // Viewer & Admin: full dashboard (Viewer = read-only, no buttons; Admin = same, campaigns etc. elsewhere)
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-xl sm:text-2xl font-bold text-slate-900">Dashboard</h1>
-        <p className="text-slate-500 text-sm mt-0.5">Overview of your AI voice agent activity.</p>
+    <div className="space-y-8">
+      <div className="pb-6 border-b border-slate-200/80">
+        <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight">Dashboard</h1>
+        <p className="text-slate-500 text-sm mt-1">
+          {isViewer ? 'Overview of AI voice agent activity. Read-only.' : 'Overview of your AI voice agent activity.'}
+        </p>
       </div>
 
       <StatsCards stats={statsForCards} loading={statsLoading} />
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <RevenueChart data={revenueSeries} loading={revenueLoading} title="Revenue per month" />
         <CallsChart data={callsChartData} loading={statsLoading} title="Calls per month" />
         <ConversionChart data={conversionChartData} loading={statsLoading} title="Conversion rate" />
