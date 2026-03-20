@@ -34,6 +34,15 @@ export async function updateLead(id, payload) {
 }
 
 /**
+ * PUT /leads/:id/assign-agent — assign lead to an agent (admin)
+ * Body: { agent_id: number|string }
+ */
+export async function assignAgentToLead(id, agentId) {
+  const { data } = await api.put(`/leads/${id}/assign-agent`, { agent_id: agentId });
+  return data;
+}
+
+/**
  * DELETE /leads/:id
  */
 export async function deleteLead(id) {

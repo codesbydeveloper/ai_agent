@@ -17,6 +17,7 @@ import ScriptsPage from './pages/ScriptsPage';
 import ScriptBuilderPage from './pages/ScriptBuilderPage';
 import PaymentsPage from './pages/PaymentsPage';
 import UsersPage from './pages/UsersPage';
+import LandingRedirect from './pages/LandingRedirect';
 import AdminOnlyRoute from './components/AdminOnlyRoute';
 import './index.css';
 
@@ -25,7 +26,7 @@ function App() {
     <BrowserRouter>
       <AuthProvider>
         <Routes>
-          <Route path="/" element={<Navigate to="/dashboard" replace />} />
+          <Route path="/" element={<LandingRedirect />} />
           <Route element={<AuthLayout />}>
             <Route path="/login" element={<LoginPage />} />
             <Route path="/register" element={<RegisterPage />} />

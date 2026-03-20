@@ -6,11 +6,13 @@ import {
   getLeadById,
   createLead,
   updateLead,
+  assignAgentToLead,
   deleteLead,
   importLeads,
 } from '../services/leadsService';
 import LeadForm from '../components/LeadForm';
 import ImportLeadsModal from '../components/ImportLeadsModal';
+import { getUsers, normalizeUsersList } from '../services/usersService';
 
 const STATUS_OPTIONS = ['', 'new', 'contacted', 'qualified', 'converted', 'lost', 'not_interested'];
 const AGENT_STATUS_OPTIONS = ['interested', 'not_interested', 'callback'];
@@ -64,6 +66,9 @@ export default function LeadsPage() {
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [updatingId, setUpdatingId] = useState(null);
   const [notesEdit, setNotesEdit] = useState({}); // id -> notes text
+  const [agents, setAgents] = useState([]);
+  const [agentsLoading, setAgentsLoading] = useState(false);
+  const [assigningId, setAssigningId] = useState(null);
 
   const fetchLeads = useCallback(async () => {
     setLoading(true);
@@ -88,6 +93,25 @@ export default function LeadsPage() {
   }, [page, pageSize, search, statusFilter, isAgent]);
 
   useEffect(() => { fetchLeads(); }, [fetchLeads]);
+
+  const fetchAgents = useCallback(async () => {
+    if (!isAdmin) return;
+    setAgentsLoading(true);
+    try {
+      const res = await getUsers({ page: 1, limit: 200, role: 'agent' });
+      const { users: list } = normalizeUsersList(res);
+      setAgents(list);
+    } catch (err) {
+      // don't block lead list; show assignment dropdown without options
+      setAgents([]);
+    } finally {
+      setAgentsLoading(false);
+    }
+  }, [isAdmin]);
+
+  useEffect(() => {
+    fetchAgents();
+  }, [fetchAgents]);
 
   function openCreate() { setFormModal({ open: true, lead: null }); }
   async function openEdit(id) {
@@ -123,6 +147,18 @@ export default function LeadsPage() {
       fetchLeads();
     } catch (err) {
       setError(err?.response?.data?.message || err?.message || 'Delete failed');
+    }
+  }
+
+  async function handleAssignAgent(leadId, agentId) {
+    setError('');
+    try {
+      await assignAgentToLead(leadId, agentId);
+      await fetchLeads();
+    } catch (err) {
+      setError(err?.response?.data?.message || err?.message || 'Assign failed');
+    } finally {
+      setAssigningId(null);
     }
   }
 
@@ -172,7 +208,7 @@ export default function LeadsPage() {
   const startRow = totalCount === 0 ? 0 : (page - 1) * pageSize + 1;
   const endRow = totalCount === 0 ? 0 : Math.min(page * pageSize, totalCount);
 
-  const showToolbarButtons = isAdmin;
+  const canCreateOrImport = isAdmin || isAgent;
   const viewerColumnsOnly = isViewer;
 
   return (
@@ -202,7 +238,7 @@ export default function LeadsPage() {
             ))}
           </select>
         </div>
-        {showToolbarButtons && (
+        {canCreateOrImport && (
           <div className="flex gap-2 shrink-0">
             <button type="button" onClick={() => setImportModalOpen(true)} className="px-3 py-2 rounded-lg border border-slate-300 text-sm font-medium text-slate-700 bg-white hover:bg-slate-50">Import CSV</button>
             <button type="button" onClick={openCreate} className="px-4 py-2 rounded-lg bg-indigo-600 text-sm font-medium text-white hover:bg-indigo-700">Add lead</button>
@@ -285,8 +321,32 @@ export default function LeadsPage() {
                     {!viewerColumnsOnly && <td className="hidden lg:table-cell px-4 py-3 text-sm text-slate-500">{formatDate(lead.created_at)}</td>}
                     {isAdmin && (
                       <td className="px-4 py-3 text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          <button type="button" onClick={() => openEdit(lead.id)} className="px-2 py-1 rounded text-sm text-indigo-600 hover:bg-indigo-50">Edit</button>
+                        <div className="flex flex-col items-end gap-2">
+                          <select
+                            value={
+                              lead.agent_id ?? lead.assigned_agent_id ?? lead.agentId ?? lead.assigned_to ?? ''
+                            }
+                            onChange={(e) => {
+                              const agentId = e.target.value;
+                              if (!agentId) return;
+                              setAssigningId(lead.id);
+                              handleAssignAgent(lead.id, agentId);
+                            }}
+                            disabled={agentsLoading || assigningId === lead.id}
+                            className="rounded-lg border border-slate-300 px-2 py-1 text-xs text-slate-800 disabled:opacity-50"
+                          >
+                            <option value="">Assign agent…</option>
+                            {agents.map((a) => (
+                              <option key={a.id ?? a._id ?? a.email} value={a.id ?? a._id}>
+                                {a.name || a.email}
+                              </option>
+                            ))}
+                          </select>
+
+                          <div className="flex items-center justify-end gap-1">
+                            <button type="button" onClick={() => openEdit(lead.id)} className="px-2 py-1 rounded text-sm text-indigo-600 hover:bg-indigo-50">
+                              Edit
+                            </button>
                           {deleteConfirm === lead.id ? (
                             <>
                               <button type="button" onClick={() => handleDelete(lead.id)} className="px-2 py-1 rounded text-sm text-red-600 font-medium hover:bg-red-50">Confirm</button>
@@ -295,6 +355,7 @@ export default function LeadsPage() {
                           ) : (
                             <button type="button" onClick={() => setDeleteConfirm(lead.id)} className="px-2 py-1 rounded text-sm text-slate-500 hover:text-red-600 hover:bg-red-50">Delete</button>
                           )}
+                          </div>
                         </div>
                       </td>
                     )}
@@ -364,7 +425,7 @@ export default function LeadsPage() {
         </div>
       )}
 
-      {formModal.open && isAdmin && (
+      {formModal.open && canCreateOrImport && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={closeForm}>
           <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto p-6" onClick={(e) => e.stopPropagation()}>
             <h2 className="text-lg font-semibold text-slate-900 mb-4">{formModal.lead?.id ? 'Edit lead' : 'Add lead'}</h2>
@@ -373,7 +434,7 @@ export default function LeadsPage() {
         </div>
       )}
 
-      {importModalOpen && (
+      {importModalOpen && canCreateOrImport && (
         <ImportLeadsModal onImport={handleImport} onClose={() => setImportModalOpen(false)} importing={importing} />
       )}
     </div>
