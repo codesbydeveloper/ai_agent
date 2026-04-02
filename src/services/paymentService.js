@@ -10,7 +10,8 @@ export async function createPaymentLink(payload) {
 }
 
 /**
- * GET /payment/status — by id or payment_link_id
+ * GET /api/payment/status — by id or payment_link_id (query string).
+ * Example: /api/payment/status?payment_link_id=plink_xxx
  * @param {Object} params - { id } or { payment_link_id }
  */
 export async function getPaymentStatus(params) {
@@ -19,7 +20,48 @@ export async function getPaymentStatus(params) {
 }
 
 /**
- * GET /payments — list with pagination and filters
+ * Picks a status string from various backend / Razorpay-shaped JSON bodies.
+ */
+export function extractStatusFromPaymentStatusResponse(body) {
+  if (body == null || typeof body !== 'object') return null;
+  const inner =
+    body.data != null && typeof body.data === 'object' && !Array.isArray(body.data) ? body.data : body;
+  const s =
+    inner.status ??
+    inner.payment_status ??
+    inner.state ??
+    inner.payment_link?.status ??
+    inner.payment?.status ??
+    body.status;
+  if (s == null || String(s).trim() === '') return null;
+  return String(s).trim();
+}
+
+/**
+ * For each row with a payment link id, calls GET /payment/status and merges `status` for the table.
+ */
+export async function enrichPaymentsWithLiveStatus(payments) {
+  if (!Array.isArray(payments) || payments.length === 0) return payments;
+  const rows = await Promise.all(
+    payments.map(async (p) => {
+      const linkId = p.payment_link_id ?? p.razorpay_payment_link_id ?? p.paymentLinkId;
+      if (!linkId) return p;
+      try {
+        const body = await getPaymentStatus({ payment_link_id: linkId });
+        const st = extractStatusFromPaymentStatusResponse(body);
+        if (st) return { ...p, status: st };
+      } catch {
+        /* keep list payload status */
+      }
+      return p;
+    }),
+  );
+  return rows;
+}
+
+/**
+ * GET /api/payments — list with pagination (query string).
+ * Example: /api/payments?page=1&limit=10&status=completed
  * @param {Object} params - { page, limit, status?, lead_id?, from_date?, to_date? }
  */
 export async function getPayments(params = {}) {

@@ -59,10 +59,15 @@ export async function deleteLead(id) {
 }
 
 /**
- * POST /leads/import — CSV import (FormData with file)
+ * POST /voice/bulk-call/upload — bulk upload CSV/Excel for voice campaign
+ * FormData fields:
+ * - file
+ * - name
+ * - is_scheduled
+ * - phone_number_id
  */
 export async function importLeads(formData) {
-  const { data } = await api.post('/leads/import', formData, {
+  const { data } = await api.post('/voice/bulk-call/upload', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
   });
   return data;

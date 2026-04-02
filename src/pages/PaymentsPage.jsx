@@ -1,21 +1,36 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { createPaymentLink, getPayments } from '../services/paymentService';
-import { getLeads } from '../services/leadsService';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPaymentLink, enrichPaymentsWithLiveStatus, getPayments } from '../services/paymentService';
 import RevenueChart from '../components/charts/RevenueChart';
 import PaymentTable from '../components/payments/PaymentTable';
 import InvoiceViewer from '../components/payments/InvoiceViewer';
+import { resolveTotalForPagination } from '../utils/pagination';
 
-const PAGE_SIZES = [10, 25, 50];
 const DEFAULT_PAGE_SIZE = 10;
 
 const fieldClass =
   'w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 outline-none';
 const labelClass = 'block text-sm font-medium text-slate-700 mb-1.5';
 
-function safePaymentsList(res) {
+/** Parses GET /api/payments body (page, limit, status query on wire). */
+function parsePaymentsResponse(res, page, pageSize) {
   const data = res?.data ?? res;
-  const list = Array.isArray(data?.payments) ? data.payments : (Array.isArray(data) ? data : []);
-  const total = data?.total ?? data?.count ?? list.length;
+  const list = Array.isArray(data?.payments)
+    ? data.payments
+    : Array.isArray(data?.data)
+      ? data.data
+      : Array.isArray(data?.results)
+        ? data.results
+        : Array.isArray(data)
+          ? data
+          : [];
+  const apiTotal =
+    data?.total ??
+    data?.count ??
+    data?.pagination?.total ??
+    data?.pagination?.count ??
+    data?.meta?.total ??
+    list.length;
+  const total = resolveTotalForPagination(page, pageSize, list.length, apiTotal, data);
   return { list, total };
 }
 
@@ -54,47 +69,45 @@ export default function PaymentsPage() {
     currency: 'INR',
     description: 'AI Receptionist Setup',
     customer: { name: '', email: '', contact: '' },
-    lead_id: '',
-    send_sms: true,
   });
-
-  const [leads, setLeads] = useState([]);
+  const fetchSeqRef = useRef(0);
 
   const fetchPayments = useCallback(async () => {
+    const seq = ++fetchSeqRef.current;
     setLoading(true);
     setError('');
     try {
       const params = { page, limit: pageSize };
       if (statusFilter) params.status = statusFilter;
       const res = await getPayments(params);
-      const { list, total: t } = safePaymentsList(res);
+      const { list, total: t } = parsePaymentsResponse(res, page, pageSize);
+      if (seq !== fetchSeqRef.current) return;
       setPayments(list);
       setTotal(t);
+      setLoading(false);
+
+      const enriched = await enrichPaymentsWithLiveStatus(list);
+      if (seq !== fetchSeqRef.current) return;
+      setPayments(enriched);
     } catch (err) {
+      if (seq !== fetchSeqRef.current) return;
       setError(err?.response?.data?.message || err?.message || 'Failed to load payments');
       setPayments([]);
       setTotal(0);
     } finally {
-      setLoading(false);
+      if (seq === fetchSeqRef.current) setLoading(false);
     }
   }, [page, pageSize, statusFilter]);
 
   useEffect(() => { fetchPayments(); }, [fetchPayments]);
 
-  useEffect(() => {
-    let cancelled = false;
-    getLeads({ limit: 200 })
-      .then((res) => {
-        const data = res?.data ?? res;
-        const list = Array.isArray(data?.leads) ? data.leads : (Array.isArray(data) ? data : []);
-        if (!cancelled) setLeads(list);
-      })
-      .catch(() => { if (!cancelled) setLeads([]); });
-    return () => { cancelled = true; };
-  }, []);
+  // Lead dropdown removed, so we don't fetch leads anymore.
 
   const chartData = useMemo(() => {
-    const paid = payments.filter((p) => (p.status || '').toLowerCase() === 'paid');
+    const paid = payments.filter((p) => {
+      const s = (p.status || '').toLowerCase();
+      return s === 'paid' || s === 'completed';
+    });
     if (paid.length === 0) return [];
     const byDate = {};
     paid.forEach((p) => {
@@ -106,7 +119,10 @@ export default function PaymentsPage() {
   }, [payments]);
 
   const summary = useMemo(() => {
-    const paid = payments.filter((p) => (p.status || '').toLowerCase() === 'paid');
+    const paid = payments.filter((p) => {
+      const s = (p.status || '').toLowerCase();
+      return s === 'paid' || s === 'completed';
+    });
     const pending = payments.filter((p) => (p.status || '').toLowerCase() === 'pending' || (p.status || '').toLowerCase() === 'created');
     const totalPaid = paid.reduce((s, p) => s + Number(p.amount || 0), 0);
     return { totalPaid, paidCount: paid.length, pendingCount: pending.length };
@@ -127,8 +143,6 @@ export default function PaymentsPage() {
           email: (form.customer?.email || '').trim() || undefined,
           contact: (form.customer?.contact || '').trim() || undefined,
         },
-        lead_id: form.lead_id ? Number(form.lead_id) : undefined,
-        send_sms: !!form.send_sms,
       };
       const res = await createPaymentLink(payload);
       const data = res?.data ?? res;
@@ -142,8 +156,6 @@ export default function PaymentsPage() {
         (typeof data?.payment_link === 'string' ? data.payment_link : null);
       setCreateSuccess({
         url: url || null,
-        send_sms: !!payload.send_sms,
-        contact: (payload.customer?.contact || '').trim() || null,
         message: data?.message ?? null,
       });
       setForm({
@@ -151,15 +163,17 @@ export default function PaymentsPage() {
         currency: 'INR',
         description: 'AI Receptionist Setup',
         customer: { name: '', email: '', contact: '' },
-        lead_id: '',
-        send_sms: true,
       });
       setPage(1);
-      getPayments({ page: 1, limit: pageSize, ...(statusFilter && { status: statusFilter }) }).then((res) => {
-        const { list, total: t } = safePaymentsList(res);
-        setPayments(list);
-        setTotal(t);
-      }).catch(() => {});
+      getPayments({ page: 1, limit: pageSize, ...(statusFilter && { status: statusFilter }) })
+        .then(async (res) => {
+          const { list, total: t } = parsePaymentsResponse(res, 1, pageSize);
+          setTotal(t);
+          setPayments(list);
+          const enriched = await enrichPaymentsWithLiveStatus(list);
+          setPayments(enriched);
+        })
+        .catch(() => {});
     } catch (err) {
       setError(err?.response?.data?.message || err?.message || 'Failed to create payment link');
     } finally {
@@ -254,12 +268,6 @@ export default function PaymentsPage() {
               </p>
             )}
 
-            {createSuccess.send_sms && (
-              <p className="border-t border-emerald-100 pt-4 text-emerald-800">
-                SMS was requested to be sent to the customer’s number{createSuccess.contact ? `: ${createSuccess.contact}` : ''}. If the backend has SMS configured, the link will be sent to that mobile.
-              </p>
-            )}
-
             <button
               type="button"
               onClick={() => setCreateSuccess(null)}
@@ -278,10 +286,10 @@ export default function PaymentsPage() {
         />
         <div className="relative border-b border-slate-100 bg-gradient-to-r from-slate-50/90 via-white to-violet-50/25 px-5 py-5 sm:px-7">
           <h2 className="text-lg font-bold text-slate-900">Create payment link</h2>
-          <p className="mt-1 text-sm text-slate-600">Send a Razorpay link to a customer (optional SMS).</p>
+          <p className="mt-1 text-sm text-slate-600">Send a Razorpay link to a customer.</p>
         </div>
-        <form onSubmit={handleCreateLink} className="relative space-y-5 p-5 sm:p-7">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <form onSubmit={handleCreateLink} className="relative space-y-4 p-5 sm:p-7">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
               <label className={labelClass}>Amount</label>
               <input
@@ -293,17 +301,6 @@ export default function PaymentsPage() {
               />
             </div>
             <div>
-              <label className={labelClass}>Currency</label>
-              <select
-                value={form.currency}
-                onChange={(e) => setForm((f) => ({ ...f, currency: e.target.value }))}
-                className={fieldClass}
-              >
-                <option value="INR">INR</option>
-                <option value="USD">USD</option>
-              </select>
-            </div>
-            <div className="sm:col-span-2 lg:col-span-1">
               <label className={labelClass}>Description</label>
               <input
                 type="text"
@@ -346,35 +343,12 @@ export default function PaymentsPage() {
               />
             </div>
           </div>
-          <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-end">
-            <div className="min-w-[12rem] flex-1 sm:max-w-xs">
-              <label className={labelClass}>Lead (optional)</label>
-              <select
-                value={form.lead_id}
-                onChange={(e) => setForm((f) => ({ ...f, lead_id: e.target.value }))}
-                className={fieldClass}
-              >
-                <option value="">None</option>
-                {leads.map((l) => (
-                  <option key={l.id} value={l.id}>{l.hotel_name || l.owner_name || `Lead #${l.id}`}</option>
-                ))}
-              </select>
-            </div>
-            <label className="flex cursor-pointer items-center gap-2.5 rounded-xl border border-slate-200 bg-slate-50/50 px-4 py-3 shadow-sm ring-1 ring-slate-100/80 sm:py-2.5">
-              <input
-                type="checkbox"
-                checked={!!form.send_sms}
-                onChange={(e) => setForm((f) => ({ ...f, send_sms: e.target.checked }))}
-                className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-              />
-              <span className="text-sm font-medium text-slate-700">Send SMS</span>
-            </label>
-          </div>
+          {/* Lead + Send SMS removed. Currency is always INR. */}
           <div className="border-t border-slate-100 pt-5">
             <button
               type="submit"
               disabled={creating}
-              className="btn-primary-gradient rounded-xl px-5 py-3 text-sm font-semibold shadow-md shadow-indigo-900/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 disabled:opacity-50 sm:py-2.5"
+              className="btn-primary-gradient w-full rounded-xl px-5 py-3 text-sm font-semibold shadow-md shadow-indigo-900/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 disabled:opacity-50 sm:py-2.5 sm:w-auto"
             >
               {creating ? 'Creating…' : 'Create payment link'}
             </button>
@@ -437,6 +411,7 @@ export default function PaymentsPage() {
               className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 outline-none"
             >
               <option value="">All</option>
+              <option value="completed">Completed</option>
               <option value="paid">Paid</option>
               <option value="pending">Pending</option>
               <option value="created">Created</option>
@@ -452,7 +427,6 @@ export default function PaymentsPage() {
           pageSize={pageSize}
           total={total}
           onPageChange={setPage}
-          onPageSizeChange={(v) => { setPageSize(v); setPage(1); }}
           onViewInvoice={setSelectedPayment}
         />
       </div>

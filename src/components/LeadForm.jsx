@@ -1,7 +1,5 @@
 import { useState, useEffect } from 'react';
 
-const STATUS_OPTIONS = ['new', 'contacted', 'qualified', 'converted', 'lost', 'not_interested'];
-
 export default function LeadForm({ lead, onSave, onCancel, saving }) {
   const [form, setForm] = useState({
     hotel_name: '',
@@ -10,8 +8,6 @@ export default function LeadForm({ lead, onSave, onCancel, saving }) {
     email: '',
     rooms: '',
     location: '',
-    status: 'new',
-    tags: '',
     notes: '',
   });
 
@@ -24,8 +20,6 @@ export default function LeadForm({ lead, onSave, onCancel, saving }) {
         email: lead.email ?? '',
         rooms: lead.rooms ?? '',
         location: lead.location ?? '',
-        status: lead.status ?? 'new',
-        tags: Array.isArray(lead.tags) ? lead.tags.join(', ') : (lead.tags ?? ''),
         notes: lead.notes ?? '',
       });
     } else {
@@ -36,8 +30,6 @@ export default function LeadForm({ lead, onSave, onCancel, saving }) {
         email: '',
         rooms: '',
         location: '',
-        status: 'new',
-        tags: '',
         notes: '',
       });
     }
@@ -53,7 +45,8 @@ export default function LeadForm({ lead, onSave, onCancel, saving }) {
     const payload = {
       ...form,
       rooms: form.rooms === '' ? undefined : Number(form.rooms) || 0,
-      tags: form.tags ? form.tags.split(',').map((t) => t.trim()).filter(Boolean) : [],
+      status: lead?.status ?? 'new',
+      tags: Array.isArray(lead?.tags) ? lead.tags : [],
     };
     onSave(payload);
   }
@@ -89,18 +82,6 @@ export default function LeadForm({ lead, onSave, onCancel, saving }) {
         <div>
           <label className={labelClass}>Location</label>
           <input name="location" value={form.location} onChange={handleChange} className={inputClass} placeholder="City, State" />
-        </div>
-        <div className="sm:col-span-2">
-          <label className={labelClass}>Status</label>
-          <select name="status" value={form.status} onChange={handleChange} className={inputClass}>
-            {STATUS_OPTIONS.map((s) => (
-              <option key={s} value={s}>{s}</option>
-            ))}
-          </select>
-        </div>
-        <div className="sm:col-span-2">
-          <label className={labelClass}>Tags (comma-separated)</label>
-          <input name="tags" value={form.tags} onChange={handleChange} className={inputClass} placeholder="vip, follow-up" />
         </div>
         <div className="sm:col-span-2">
           <label className={labelClass}>Notes</label>

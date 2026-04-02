@@ -426,6 +426,18 @@ export default function LandingPage() {
                 <Link to="/register" className="font-medium text-indigo-700 hover:text-violet-800">
                   Register
                 </Link>
+                <Link
+                  to="/privacy-policy"
+                  className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 font-medium text-indigo-700 shadow-sm hover:border-violet-300 hover:bg-violet-50/60 hover:text-violet-800"
+                >
+                  Privacy Policy
+                </Link>
+                <Link
+                  to="/terms-and-conditions"
+                  className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 font-medium text-indigo-700 shadow-sm hover:border-violet-300 hover:bg-violet-50/60 hover:text-violet-800"
+                >
+                  Terms &amp; Conditions
+                </Link>
               </div>
             </div>
           </footer>

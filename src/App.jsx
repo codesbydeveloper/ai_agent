@@ -18,8 +18,14 @@ import ScriptsPage from './pages/ScriptsPage';
 import ScriptBuilderPage from './pages/ScriptBuilderPage';
 import PaymentsPage from './pages/PaymentsPage';
 import UsersPage from './pages/UsersPage';
+import CalendarPage from './pages/CalendarPage';
+import AllLogPage from './pages/AllLogPage';
 import LandingRedirect from './pages/LandingRedirect';
+import PrivacyPolicyPage from './pages/PrivacyPolicyPage';
+import TermsAndConditionsPage from './pages/TermsAndConditionsPage';
 import AdminOnlyRoute from './components/AdminOnlyRoute';
+import AgentOrAdminRoute from './components/AgentOrAdminRoute';
+import AgentsPage from './pages/AgentsPage';
 import './index.css';
 
 function App() {
@@ -29,6 +35,8 @@ function App() {
         <AuthProvider>
           <Routes>
             <Route path="/" element={<LandingRedirect />} />
+            <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
+            <Route path="/terms-and-conditions" element={<TermsAndConditionsPage />} />
             <Route element={<AuthLayout />}>
               <Route path="/login" element={<LoginPage />} />
               <Route path="/register" element={<RegisterPage />} />
@@ -46,6 +54,8 @@ function App() {
               <Route path="calls" element={<CallsPage />} />
               <Route path="leads" element={<LeadsPage />} />
               <Route path="analytics" element={<AnalyticsPage />} />
+              <Route path="calendar" element={<CalendarPage />} />
+              <Route path="all-log" element={<AllLogPage />} />
               <Route path="campaigns" element={<AdminOnlyRoute><CampaignListPage /></AdminOnlyRoute>} />
               <Route path="campaigns/new" element={<AdminOnlyRoute><CreateCampaignPage /></AdminOnlyRoute>} />
               <Route path="campaigns/:id" element={<AdminOnlyRoute><CampaignDetailsPage /></AdminOnlyRoute>} />
@@ -54,6 +64,7 @@ function App() {
               <Route path="scripts/:id" element={<AdminOnlyRoute><ScriptBuilderPage /></AdminOnlyRoute>} />
               <Route path="payments" element={<AdminOnlyRoute><PaymentsPage /></AdminOnlyRoute>} />
               <Route path="users" element={<AdminOnlyRoute><UsersPage /></AdminOnlyRoute>} />
+              <Route path="agents" element={<AgentOrAdminRoute><AgentsPage /></AgentOrAdminRoute>} />
             </Route>
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

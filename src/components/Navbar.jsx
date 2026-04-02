@@ -7,6 +7,8 @@ const routeTitles = {
   '/dashboard/calls': 'Calls',
   '/dashboard/leads': 'Leads',
   '/dashboard/analytics': 'Analytics',
+  '/dashboard/calendar': 'Calendar',
+  '/dashboard/all-log': 'Call Log',
   '/dashboard/campaigns': 'Campaigns',
   '/dashboard/campaigns/new': 'New campaign',
   '/dashboard/scripts': 'Scripts',
@@ -84,10 +86,16 @@ export default function Navbar({ onMenuClick }) {
           <div className="hidden h-10 w-px shrink-0 bg-gradient-to-b from-transparent via-violet-200/80 to-transparent sm:block lg:hidden" aria-hidden />
 
           <div className="flex min-w-0 items-center gap-3 sm:gap-4">
-            <div
-              className="hidden h-11 w-1 shrink-0 rounded-full bg-gradient-to-b from-violet-500 via-indigo-500 to-purple-700 shadow-sm shadow-violet-500/30 sm:block sm:h-12"
-              aria-hidden
-            />
+            <div className="hidden h-10 w-10 shrink-0 overflow-hidden rounded-xl border border-violet-200/60 bg-white/90 p-1 shadow-sm shadow-violet-500/10 sm:flex sm:items-center sm:justify-center">
+              <img
+                src="/voice-recognition_13320489.png"
+                alt=""
+                className="h-full w-full object-contain"
+                decoding="async"
+                draggable={false}
+                aria-hidden
+              />
+            </div>
             <div className="min-w-0 py-0.5">
               <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0">
                 <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-violet-600/95">Workspace</p>

@@ -53,6 +53,12 @@ const DEFAULT_STEPS = [
   { id: 'payment', label: 'Send payment link', prompt: 'I will send a payment link. 14-day free trial.' },
 ];
 
+function toSimpleSteps(nodes) {
+  const steps = deriveSteps(nodes);
+  if (steps.length > 0) return steps.map((s) => ({ label: s.label, prompt: s.prompt }));
+  return DEFAULT_STEPS.map((s) => ({ label: s.label, prompt: s.prompt }));
+}
+
 export default function ScriptBuilderPage() {
   const { id } = useParams();
   const isNew = id === 'new' || !id;
@@ -63,6 +69,8 @@ export default function ScriptBuilderPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [deleted, setDeleted] = useState(false);
+  const [builderMode, setBuilderMode] = useState('easy');
+  const [simpleSteps, setSimpleSteps] = useState(() => DEFAULT_STEPS.map((s) => ({ label: s.label, prompt: s.prompt })));
 
   const initial = useMemo(() => (isNew ? toLinearFlowNodes(DEFAULT_STEPS) : { nodes: [], edges: [] }), [isNew]);
   const [nodes, setNodes, onNodesChange] = useNodesState(initial.nodes);
@@ -103,14 +111,17 @@ export default function ScriptBuilderPage() {
         if (Array.isArray(flow?.nodes) && Array.isArray(flow?.edges)) {
           setNodes(attachOnChange(flow.nodes));
           setEdges(flow.edges);
+          setSimpleSteps(toSimpleSteps(flow.nodes));
         } else if (Array.isArray(flow?.steps)) {
           const { nodes: n, edges: e } = toLinearFlowNodes(flow.steps);
           setNodes(attachOnChange(n));
           setEdges(e);
+          setSimpleSteps(flow.steps.map((s, idx) => ({ label: s.label ?? `Step ${idx + 1}`, prompt: s.prompt ?? '' })));
         } else {
           const { nodes: n, edges: e } = toLinearFlowNodes(DEFAULT_STEPS);
           setNodes(attachOnChange(n));
           setEdges(e);
+          setSimpleSteps(DEFAULT_STEPS.map((s) => ({ label: s.label, prompt: s.prompt })));
         }
       } catch (err) {
         if (cancelled) return;
@@ -128,6 +139,21 @@ export default function ScriptBuilderPage() {
     setEdges((eds) => addEdge({ ...connection, type: 'smoothstep' }, eds));
   }, [setEdges]);
 
+  const syncSimpleStepsToFlow = useCallback((steps) => {
+    const cleaned = steps
+      .map((s, idx) => ({
+        id: `step_${idx + 1}`,
+        label: (s.label || '').trim() || `Step ${idx + 1}`,
+        prompt: (s.prompt || '').trim(),
+      }))
+      .filter((s) => s.label || s.prompt);
+
+    const fallback = cleaned.length > 0 ? cleaned : [{ id: 'step_1', label: 'Step 1', prompt: '' }];
+    const { nodes: n, edges: e } = toLinearFlowNodes(fallback);
+    setNodes(attachOnChange(n));
+    setEdges(e);
+  }, [attachOnChange, setEdges, setNodes]);
+
   const onAddNode = useCallback((type) => {
     const idx = addCounter.current++;
     const newId = `${type}_${Date.now()}_${idx}`;
@@ -144,6 +170,30 @@ export default function ScriptBuilderPage() {
 
     setNodes((ns) => [...ns, base]);
   }, [handleNodeDataChange, setNodes]);
+
+  function updateSimpleStep(index, patch) {
+    setSimpleSteps((prev) => {
+      const next = prev.map((s, i) => (i === index ? { ...s, ...patch } : s));
+      syncSimpleStepsToFlow(next);
+      return next;
+    });
+  }
+
+  function addSimpleStep() {
+    setSimpleSteps((prev) => {
+      const next = [...prev, { label: `Step ${prev.length + 1}`, prompt: '' }];
+      syncSimpleStepsToFlow(next);
+      return next;
+    });
+  }
+
+  function removeSimpleStep(index) {
+    setSimpleSteps((prev) => {
+      const next = prev.filter((_, i) => i !== index);
+      syncSimpleStepsToFlow(next);
+      return next;
+    });
+  }
 
   async function handleSave() {
     setSaving(true);
@@ -195,7 +245,7 @@ export default function ScriptBuilderPage() {
             <span className="truncate">{isNew ? 'New' : `Script ${id}`}</span>
           </div>
           <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-900">Script Builder</h1>
-          <p className="mt-1 text-sm text-slate-500">Design an AI conversation flow visually with nodes and connections.</p>
+          <p className="mt-1 text-sm text-slate-500">Use Easy mode for quick scripts, or Advanced mode for visual flow mapping.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2 shrink-0">
           {!isNew && (
@@ -248,6 +298,7 @@ export default function ScriptBuilderPage() {
                   const { nodes: n, edges: e } = toLinearFlowNodes(DEFAULT_STEPS);
                   setNodes(attachOnChange(n));
                   setEdges(e);
+                  setSimpleSteps(DEFAULT_STEPS.map((s) => ({ label: s.label, prompt: s.prompt })));
                 }}
                 disabled={loading || saving}
                 className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
@@ -256,7 +307,10 @@ export default function ScriptBuilderPage() {
               </button>
               <button
                 type="button"
-                onClick={() => { setNodes([]); setEdges([]); }}
+                onClick={() => {
+                  setSimpleSteps([{ label: 'Step 1', prompt: '' }]);
+                  syncSimpleStepsToFlow([{ label: 'Step 1', prompt: '' }]);
+                }}
                 disabled={loading || saving}
                 className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
               >
@@ -278,10 +332,72 @@ export default function ScriptBuilderPage() {
         </div>
 
         <div className="lg:col-span-2">
+          <div className="mb-3 inline-flex rounded-xl border border-slate-200 bg-white p-1 shadow-sm">
+            <button
+              type="button"
+              onClick={() => setBuilderMode('easy')}
+              className={`rounded-lg px-3 py-1.5 text-sm font-semibold ${builderMode === 'easy' ? 'bg-indigo-600 text-white' : 'text-slate-700 hover:bg-slate-50'}`}
+            >
+              Easy mode
+            </button>
+            <button
+              type="button"
+              onClick={() => setBuilderMode('advanced')}
+              className={`rounded-lg px-3 py-1.5 text-sm font-semibold ${builderMode === 'advanced' ? 'bg-indigo-600 text-white' : 'text-slate-700 hover:bg-slate-50'}`}
+            >
+              Advanced mode
+            </button>
+          </div>
+
           {loading ? (
             <div className="flex flex-col items-center justify-center rounded-2xl border border-slate-200 bg-white py-20 shadow-sm">
               <div className="h-8 w-8 animate-spin rounded-full border-2 border-indigo-600 border-t-transparent" />
               <p className="mt-3 text-sm text-slate-500">Loading script…</p>
+            </div>
+          ) : builderMode === 'easy' ? (
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+              <div className="flex items-center justify-between gap-2">
+                <h2 className="text-sm font-semibold text-slate-900">Script steps</h2>
+                <button
+                  type="button"
+                  onClick={addSimpleStep}
+                  className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-100"
+                >
+                  + Add step
+                </button>
+              </div>
+              <p className="mt-1 text-xs text-slate-500">Simple list editor. We auto-build the flow in the background.</p>
+              <div className="mt-4 space-y-3">
+                {simpleSteps.map((step, idx) => (
+                  <div key={`${idx}-${step.label}`} className="rounded-xl border border-slate-200 p-3">
+                    <div className="mb-2 flex items-center justify-between">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Step {idx + 1}</p>
+                      {simpleSteps.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => removeSimpleStep(idx)}
+                          className="text-xs font-semibold text-rose-600 hover:text-rose-700"
+                        >
+                          Remove
+                        </button>
+                      )}
+                    </div>
+                    <input
+                      value={step.label}
+                      onChange={(e) => updateSimpleStep(idx, { label: e.target.value })}
+                      placeholder="Step title"
+                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-800 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                    />
+                    <textarea
+                      value={step.prompt}
+                      onChange={(e) => updateSimpleStep(idx, { prompt: e.target.value })}
+                      placeholder="What should AI say in this step?"
+                      rows={3}
+                      className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-800 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                    />
+                  </div>
+                ))}
+              </div>
             </div>
           ) : (
             <FlowEditor
